@@ -115,11 +115,27 @@ def train_bpe(
 
 
 if __name__ == "__main__":
-    pretoken_counter = Counter()
-    pretoken_counter.update(["low", "low", "low", "low", "low", "lower", "lower", "widest", "widest", "widest", "newest", "newest", "newest", "newest", "newest", "newest"])
+    # pretoken_counter = Counter()
+    # pretoken_counter.update(["low", "low", "low", "low", "low", "lower", "lower", "widest", "widest", "widest", "newest", "newest", "newest", "newest", "newest", "newest"])
 
-    merge_manager = MergeManager(pretoken_counter)
-    (vocab, merges) = build_vocab(merge_manager, 256 + 9, [])
+    # merge_manager = MergeManager(pretoken_counter)
+    # (vocab, merges) = build_vocab(merge_manager, 256 + 9, [])
+    # print(vocab)
+    # print(merges)
 
-    print(vocab)
-    print(merges)
+    import time
+
+    start_time = time.perf_counter()
+
+    # --- Code you want to measure starts here ---
+    (vocab, merges) = train_bpe(
+        input_path="data/TinyStoriesV2-GPT4-train.txt",
+        vocab_size=10000,
+        special_tokens=["<|endoftext|>"]
+    )
+    # --- Code you want to measure ends here ---
+
+    end_time = time.perf_counter()
+    execution_time = end_time - start_time
+
+    print(f"Execution time: {execution_time:.6f} seconds")

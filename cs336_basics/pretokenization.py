@@ -2,10 +2,10 @@ import os
 import regex as re
 from collections import Counter
 from typing import BinaryIO
+import multiprocessing
 
 
 PAT = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
-NUM_PROCESSES = 4
 
 def find_chunk_boundaries(
     file: BinaryIO,
@@ -54,11 +54,33 @@ def find_chunk_boundaries(
     return sorted(set(chunk_boundaries))
 
 
+def process_chunk(
+    input_path: str | os.PathLike,
+    start: int,
+    end: int,
+    doc_splilt_re: str,
+) -> Counter[str]:
+
+    with open(input_path, "rb") as data_file:
+        data_file.seek(start)
+        chunk = data_file.read(
+            end - start).decode("utf-8", errors="ignore")
+        # Run pre-tokenization on your chunk and store the counts for each pre-token
+        docs = re.split(doc_splilt_re, chunk)
+
+        chunk_counter: Counter[str] = Counter()
+        for doc in docs:
+            chunk_counter.update(re.findall(PAT, doc))
+        return chunk_counter
+
 def count_pretokens(
     input_path: str | os.PathLike,
     special_tokens: list[str],
 ) -> Counter[str]:
     assert len(special_tokens) >= 1, "no special tokens provided"
+
+    num_cores = multiprocessing.cpu_count()
+    print(f"Starting parallel processing using {num_cores} CPU cores...")
 
     doc_splilt_re = "|".join([re.escape(special_token)
                              for special_token in special_tokens])
@@ -66,33 +88,15 @@ def count_pretokens(
     with open(input_path, "rb") as data_file:
         chunk_split_special_token = special_tokens[0].encode("utf-8")
         boundaries = find_chunk_boundaries(
-            data_file, NUM_PROCESSES, chunk_split_special_token)
+            data_file, num_cores, chunk_split_special_token)
 
-        counter: Counter[str] = Counter()
-        # The following is a serial implementation, but you can parallelize this
-        # by sending each start/end pair to a set of processes.
-        for start, end in zip(boundaries[:-1], boundaries[1:]):
-            data_file.seek(start)
-            chunk = data_file.read(
-                end - start).decode("utf-8", errors="ignore")
-            # Run pre-tokenization on your chunk and store the counts for each pre-token
-            docs = re.split(doc_splilt_re, chunk)
+    chunk_params = [(input_path, start, end, doc_splilt_re) for start, end in zip(boundaries[:-1], boundaries[1:])]
 
-            chunk_counter: Counter[str] = Counter()
-            for doc in docs:
-                chunk_counter.update(re.findall(PAT, doc))
-            counter = counter + chunk_counter
+    with multiprocessing.Pool() as pool:
+        chunk_counters = pool.starmap(process_chunk, chunk_params)
 
-        return counter
+    counter: Counter[str] = Counter()
+    for chunk_counter in chunk_counters:
+        counter.update(chunk_counter)
+    return counter
 
-# ## Usage
-# with open(..., "rb") as f:
-#     num_processes = 4
-#     boundaries = find_chunk_boundaries(f, num_processes, b"<|endoftext|>")
-
-#     # The following is a serial implementation, but you can parallelize this
-#     # by sending each start/end pair to a set of processes.
-#     for start, end in zip(boundaries[:-1], boundaries[1:]):
-#         f.seek(start)
-#         chunk = f.read(end - start).decode("utf-8", errors="ignore")
-#         # Run pre-tokenization on your chunk and store the counts for each pre-token
