@@ -1,0 +1,19 @@
+{
+  "name": "cs336-basics",
+  "image": "mcr.microsoft.com/devcontainers/python:1-3.12-bullseye",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.debugpy",
+        "charliermarsh.ruff"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "${containerWorkspaceFolder}/.venv/bin/python",
+        "python.terminal.activateEnvironment": false,
+        "editor.formatOnSave": true
+      }
+    }
+  },
+  "postCreateCommand": "python -m pip install --no-cache-dir uv && uv sync --frozen"
+}
