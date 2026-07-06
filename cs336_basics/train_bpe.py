@@ -1,5 +1,6 @@
 
 import os
+from pathlib import Path
 from collections import Counter
 from sortedcontainers import SortedList
 import time
@@ -140,12 +141,26 @@ def build_vocab(
 
 
 def train_bpe(
-    input_path: str | os.PathLike,
+    input_path: str,
     vocab_size: int,
     special_tokens: list[str],
 ) -> tuple[dict[int, bytes], list[tuple[bytes, bytes]]]:
 
-    pretoken_counter = count_pretokens(input_path, special_tokens)
+    pretoken_counter_cache_path = Path(input_path + ".pkl")
+
+    if pretoken_counter_cache_path.is_file():
+        with open(pretoken_counter_cache_path, "rb") as f:
+            pretoken_counter = pickle.load(f)
+        print(
+            f"Loaded cached pretoken counter from {pretoken_counter_cache_path}")
+        for item, count in pretoken_counter.most_common(10):
+            print(f"  {item}: {count}")
+    else:
+        pretoken_counter = count_pretokens(input_path, special_tokens, 100)
+        with open(pretoken_counter_cache_path, "wb") as f:
+            pickle.dump(pretoken_counter, f)
+        print(f"Counted pretokens and dumped to {pretoken_counter_cache_path}")
+
     merge_manager = MergeManager(pretoken_counter)
 
     return build_vocab(merge_manager, vocab_size, special_tokens)
@@ -176,7 +191,7 @@ def train_bpe_expts_owt():
 
     # --- Code you want to measure starts here ---
     (vocab, merges) = train_bpe(
-        input_path="data/owt_valid.txt",
+        input_path="data/owt_train.txt",
         vocab_size=32000,
         special_tokens=["<|endoftext|>"]
     )
@@ -207,7 +222,7 @@ def exam_bpe_owt():
 
     # Sorts the items in descending order by length and grabs the first 10
     longest_10_items = sorted(
-        vocab.items(), key=lambda x: len(x[1]), reverse=True)[:10]
+        vocab.items(), key=lambda x: len(x[1]), reverse=True)[:100]
     print(longest_10_items)
 
 
@@ -224,7 +239,9 @@ def test_bpe_minimum_case():
 
 if __name__ == "__main__":
     # test_bpe_minimum_case()
+    
     # train_bpe_tinystories()
     # exam_bpe_tinystories()
+
     train_bpe_expts_owt()
-    # exam_bpe_owt()
+    exam_bpe_owt()

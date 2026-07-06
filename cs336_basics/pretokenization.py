@@ -1,3 +1,4 @@
+import math
 import os
 import regex as re
 from collections import Counter
@@ -6,6 +7,7 @@ import multiprocessing
 
 
 PAT = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
+
 
 def find_chunk_boundaries(
     file: BinaryIO,
@@ -16,7 +18,8 @@ def find_chunk_boundaries(
     Chunk the file into parts that can be counted independently.
     May return fewer chunks if the boundaries end up overlapping.
     """
-    assert isinstance(split_special_token, bytes), "Must represent special token as a bytestring"
+    assert isinstance(split_special_token,
+                      bytes), "Must represent special token as a bytestring"
 
     # Get total file size in bytes
     file.seek(0, os.SEEK_END)
@@ -73,14 +76,32 @@ def process_chunk(
             chunk_counter.update(re.findall(PAT, doc))
         return chunk_counter
 
+
+def process_batch(chunk_params: list, batch_index: int) -> Counter[str]:
+    counter: Counter[str] = Counter()
+    for chunk_index in range(len(chunk_params)):
+        [input_path, start, end, doc_splilt_re] = chunk_params[chunk_index]
+        chunk_counter = process_chunk(input_path, start, end, doc_splilt_re)
+        counter.update(chunk_counter)
+        print(f"  Processed chunk {batch_index}.{chunk_index}")
+
+    return counter
+
+
+def split_into_n_batches_rigid(data, num_batches):
+    batch_size = math.ceil(len(data) / num_batches)
+    result = []
+    for i in range(0, len(data), batch_size):
+        result.append((data[i: i + batch_size], int(i / batch_size)))
+    return result
+
+
 def count_pretokens(
     input_path: str | os.PathLike,
     special_tokens: list[str],
+    num_chunks: int,
 ) -> Counter[str]:
     assert len(special_tokens) >= 1, "no special tokens provided"
-
-    num_cores = multiprocessing.cpu_count()
-    print(f"Starting parallel processing using {num_cores} CPU cores...")
 
     doc_splilt_re = "|".join([re.escape(special_token)
                              for special_token in special_tokens])
@@ -88,15 +109,17 @@ def count_pretokens(
     with open(input_path, "rb") as data_file:
         chunk_split_special_token = special_tokens[0].encode("utf-8")
         boundaries = find_chunk_boundaries(
-            data_file, num_cores, chunk_split_special_token)
+            data_file, num_chunks, chunk_split_special_token)
+    print(f"Detected {len(boundaries) - 1} chunks.")
 
-    chunk_params = [(input_path, start, end, doc_splilt_re) for start, end in zip(boundaries[:-1], boundaries[1:])]
-
+    num_cores = multiprocessing.cpu_count()
+    print(f"Starting parallel processing using {num_cores} CPU cores...")
+    batch_params = split_into_n_batches_rigid([(input_path, start, end, doc_splilt_re)
+                                              for start, end in zip(boundaries[:-1], boundaries[1:])], num_cores)
     with multiprocessing.Pool() as pool:
-        chunk_counters = pool.starmap(process_chunk, chunk_params)
+        batch_counters = pool.starmap(process_batch, batch_params)
 
     counter: Counter[str] = Counter()
-    for chunk_counter in chunk_counters:
-        counter.update(chunk_counter)
+    for batch_counter in batch_counters:
+        counter.update(batch_counter)
     return counter
-
