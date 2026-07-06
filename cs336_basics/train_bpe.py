@@ -15,13 +15,12 @@ class PairMap:
             key=lambda item: (item[1][0], item[0]))
 
     def add_pair_count(self, pair: tuple[bytes, bytes], pretoken_count: int, pretoken_index: int):
-        if pair not in self._lookup:
+        if pair in self._lookup:
+            value = self._lookup[pair]
+            self._sorted_items.remove((pair, value))
+        else:
             value = [0, []]
             self._lookup[pair] = value
-            self._sorted_items.add((pair, value))
-
-        value = self._lookup[pair]
-        self._sorted_items.remove((pair, value))
 
         value[0] += pretoken_count
         if (len(value[1]) == 0 or value[1][-1] != pretoken_index):
@@ -35,14 +34,13 @@ class PairMap:
         value = self._lookup[pair]
         self._sorted_items.remove((pair, value))
 
+        if (value[0] == pretoken_count):
+            self._lookup.pop(pair)
+            return
+
         value[0] -= pretoken_count
 
-        self._lookup[pair] = value
         self._sorted_items.add((pair, value))
-
-        if (value[0] == 0):
-            self._lookup.pop(pair)
-            self._sorted_items.remove((pair, value))
 
     def get_next_pair(self) -> tuple[tuple[bytes, bytes], int, list[int]]:
         (pair, [count, pretoken_indices]) = self._sorted_items[-1]
