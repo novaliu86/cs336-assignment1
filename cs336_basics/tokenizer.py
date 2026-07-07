@@ -23,7 +23,7 @@ class Tokenizer:
             assert special_token.encode(
                 "utf-8") in self.token_id_by_bytes, f"missing special token {special_token}"
         special_tokens.sort(key=lambda x: -len(x))
-        self.special_tokens: set[str] = set(special_tokens)
+        self.special_tokens: list[str] = special_tokens
         self.doc_splilt_re = "|".join([re.escape(special_token)
                                        for special_token in special_tokens])
 
@@ -78,8 +78,6 @@ class Tokenizer:
 
         (tokens, i) = self._encode_special_tokens(text, 0)
         for doc in docs:
-            if (doc == ""):
-                continue
             pretokens = re.findall(PAT, doc)
             for pretoken in pretokens:
                 tokens.extend(self._encode_pretoken(pretoken))
