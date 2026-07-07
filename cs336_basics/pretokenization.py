@@ -61,9 +61,10 @@ def process_chunk(
     input_path: str | os.PathLike,
     start: int,
     end: int,
-    doc_splilt_re: str,
+    special_tokens: list[str],
 ) -> Counter[str]:
-
+    doc_splilt_re = "|".join([re.escape(special_token)
+                              for special_token in special_tokens])
     with open(input_path, "rb") as data_file:
         data_file.seek(start)
         chunk = data_file.read(
@@ -80,10 +81,10 @@ def process_chunk(
 def process_batch(chunk_params: list, batch_index: int) -> Counter[str]:
     counter: Counter[str] = Counter()
     for chunk_index in range(len(chunk_params)):
-        [input_path, start, end, doc_splilt_re] = chunk_params[chunk_index]
-        chunk_counter = process_chunk(input_path, start, end, doc_splilt_re)
+        [input_path, start, end, special_tokens] = chunk_params[chunk_index]
+        chunk_counter = process_chunk(input_path, start, end, special_tokens)
         counter.update(chunk_counter)
-        print(f"  Processed chunk {batch_index}.{chunk_index}")
+        # print(f"  Processed chunk {batch_index}.{chunk_index}")
 
     return counter
 
@@ -103,9 +104,6 @@ def count_pretokens(
 ) -> Counter[str]:
     assert len(special_tokens) >= 1, "no special tokens provided"
 
-    doc_splilt_re = "|".join([re.escape(special_token)
-                             for special_token in special_tokens])
-
     with open(input_path, "rb") as data_file:
         chunk_split_special_token = special_tokens[0].encode("utf-8")
         boundaries = find_chunk_boundaries(
@@ -114,7 +112,7 @@ def count_pretokens(
 
     num_cores = multiprocessing.cpu_count()
     print(f"Starting parallel processing using {num_cores} CPU cores...")
-    batch_params = split_into_n_batches_rigid([(input_path, start, end, doc_splilt_re)
+    batch_params = split_into_n_batches_rigid([(input_path, start, end, special_tokens)
                                               for start, end in zip(boundaries[:-1], boundaries[1:])], num_cores)
     with multiprocessing.Pool() as pool:
         batch_counters = pool.starmap(process_batch, batch_params)
