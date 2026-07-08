@@ -446,6 +446,9 @@ def test_encode_memory_usage():
         _ = _encode(tokenizer, contents)
 
 
+# Decorator @memory_limit doesn't work as expected for yield functions like tokenizer.encode_iterable
+# as process.memory_info().rss won't change before and after calling _encode_iterable
+# As a result, test_encode_iterable_memory_usage always pass, with no real memory limit.
 @memory_limit(int(1e6))
 def _encode_iterable(tokenizer, iterable):
     """
