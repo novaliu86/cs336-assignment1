@@ -11,7 +11,7 @@ from torch import Tensor
 
 from cs336_basics.tokenizer import Tokenizer
 from cs336_basics.train_bpe import train_bpe
-from cs336_basics.model import Linear, Embedding, Rmsnorm
+from cs336_basics.model import Linear, Embedding, Rmsnorm, Swiglu, Rope
 
 
 def run_linear(
@@ -34,7 +34,7 @@ def run_linear(
     """
 
     model = Linear(d_in, d_out)
-    model.load_state_dict({"weight": weights})
+    model.load_state_dict({"weights": weights})
     return model.forward(in_features)
 
 
@@ -58,7 +58,7 @@ def run_embedding(
     """
 
     model = Embedding(vocab_size, d_model)
-    model.load_state_dict({"weight": weights})
+    model.load_state_dict({"weights": weights})
     return model.forward(token_ids)
 
 
@@ -91,7 +91,11 @@ def run_swiglu(
     # swiglu.w1.weight.data = w1_weight
     # swiglu.w2.weight.data = w2_weight
     # swiglu.w3.weight.data = w3_weight
-    raise NotImplementedError
+
+    model = Swiglu(d_model, d_ff)
+    model.load_state_dict(
+        {"w1.weights": w1_weight, "w2.weights": w2_weight, "w3.weights": w3_weight})
+    return model.forward(in_features)
 
 
 def run_scaled_dot_product_attention(
@@ -208,7 +212,9 @@ def run_rope(
     Returns:
         Float[Tensor, " ... sequence_length d_k"]: Tensor with RoPEd input.
     """
-    raise NotImplementedError
+    
+    model = Rope(theta, d_k, max_seq_len)
+    return model.forward(in_query_or_key, token_positions)
 
 
 def run_transformer_block(
@@ -387,7 +393,7 @@ def run_rmsnorm(
         RMSNorm of the `in_features`.
     """
     model = Rmsnorm(d_model, eps)
-    model.load_state_dict({"weight": weights})
+    model.load_state_dict({"weights": weights})
     return model.forward(in_features)
 
 
