@@ -65,6 +65,10 @@ class Rmsnorm(torch.nn.Module):
         return result.to(in_dtype)
 
 
+def silu(x: torch.Tensor) -> torch.Tensor:
+    return torch.sigmoid(x) * x
+
+
 class Swiglu(torch.nn.Module):
     def __init__(self, d_model: int, d_ff: int, device=None, dtype=None):
         super().__init__()
@@ -85,7 +89,7 @@ class Swiglu(torch.nn.Module):
         """
         # SwiGLU formula: (SiLU(w1(x)) * w3(x)) @ w2
         up_proj1 = self.w1(x)
-        gate = torch.sigmoid(up_proj1) * up_proj1
+        gate = silu(up_proj1)
         up_proj3 = self.w3(x)
 
         # Element-wise multiplication followed by final down projection
@@ -127,14 +131,18 @@ class Rope(torch.nn.Module):
         emb = repeat(freqss, '... d -> ... (d 2)')
 
         # 5. Register buffers so they track with model.to(device) automatically
-        self.register_buffer("cos", emb.cos())
-        self.register_buffer("sin", emb.sin())
+        self.register_buffer("cos", emb.cos(), persistent=False)
+        self.register_buffer("sin", emb.sin(), persistent=False)
         self.reset_parameters()
 
     def reset_parameters(self):
         pass
 
-    def forward(self, x: torch.Tensor, token_positions: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, token_positions: torch.Tensor | None) -> torch.Tensor:
+        if token_positions == None:
+            seq_len = x.size(-2)
+            token_positions = torch.arange(seq_len)
+
         # print(f"x[0][1][1]: {x[0][1][1]}")
         # print(f"token_positions[1]: {token_positions[1]}")
         # print(f"rotate_half(x)[0][1][1]: {rotate_half(x)[0][1][1]}")
@@ -188,3 +196,71 @@ def scaled_dot_product_attention(
         x = x.masked_fill(~mask, float('-inf'))
     attention_weights = softmax(x, dim=-1)
     return einsum(attention_weights, V, "... queries keys, ... keys d_v -> ... queries d_v")
+
+
+def create_causal_mask(seq_len: int, device: torch.device = torch.device("cpu")) -> torch.Tensor:
+    """
+    Generates a boolean causal mask of shape [1, 1, seq_len, seq_len].
+
+    True means KEEP/ATTEND, False means IGNORE/HIDE.
+    """
+    # 1. Create a matrix of ones with dimensions [seq_len, seq_len]
+    ones = torch.ones(seq_len, seq_len, device=device)
+
+    # 2. Extract the lower-triangular part (including the diagonal)
+    lower_triangular = torch.tril(ones)
+
+    # 3. Cast to boolean type
+    bool_mask = lower_triangular.to(torch.bool)
+
+    # 4. Reshape to [1, 1, seq_len, seq_len] to allow automatic broadcasting
+    # across arbitrary batch sizes and parallel attention heads
+    return bool_mask.unsqueeze(0).unsqueeze(0)
+
+
+class MultiheadSelfAttention(torch.nn.Module):
+    def __init__(self, d_model: int, num_heads: int, theta: float | None = None, max_seq_len: int | None = None, device=None, dtype=None):
+        super().__init__()
+        assert d_model % num_heads == 0, "d_model must be cleanly divisible by num_heads"
+
+        self.num_heads = num_heads
+        hd_k = d_model
+        hd_v = d_model
+        self.W_Q = Linear(hd_k, d_model, device=device, dtype=dtype)
+        self.W_K = Linear(hd_k, d_model, device=device, dtype=dtype)
+        self.W_V = Linear(hd_v, d_model, device=device, dtype=dtype)
+        self.W_O = Linear(d_model, hd_v, device=device, dtype=dtype)
+
+        if theta and max_seq_len:
+            self.rope = Rope(theta, d_model / num_heads, max_seq_len)
+        else:
+            self.rope = None
+
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        self.W_Q.reset_parameters()
+        self.W_K.reset_parameters()
+        self.W_V.reset_parameters()
+        self.W_O.reset_parameters()
+
+    def forward(self, x: torch.Tensor, token_positions: torch.Tensor | None = None) -> torch.Tensor:
+        q_proj = self.W_Q(x)
+        k_proj = self.W_K(x)
+        v_proj = self.W_V(x)
+
+        Q = rearrange(q_proj, '... s (h d) -> ... h s d', h=self.num_heads)
+        K = rearrange(k_proj, '... s (h d) -> ... h s d', h=self.num_heads)
+
+        if self.rope != None:
+            Q = self.rope(Q, token_positions)
+            K = self.rope(K, token_positions)
+
+        V = rearrange(v_proj, '... s (h d) -> ... h s d', h=self.num_heads)
+
+        seq_len = x.size(-2)
+        mask = create_causal_mask(seq_len, device=x.device)
+
+        out_concat = scaled_dot_product_attention(Q, K, V, mask)
+        out_concat = rearrange(out_concat, '... h s d -> ... s (h d)')
+        return self.W_O(out_concat)

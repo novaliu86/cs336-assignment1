@@ -11,7 +11,7 @@ from torch import Tensor
 
 from cs336_basics.tokenizer import Tokenizer
 from cs336_basics.train_bpe import train_bpe
-from cs336_basics.model import Linear, Embedding, Rmsnorm, Swiglu, Rope, softmax, scaled_dot_product_attention
+from cs336_basics.model import Linear, Embedding, Rmsnorm, silu, Swiglu, Rope, softmax, scaled_dot_product_attention, MultiheadSelfAttention
 
 
 def run_linear(
@@ -35,7 +35,7 @@ def run_linear(
 
     model = Linear(d_in, d_out)
     model.load_state_dict({"weights": weights})
-    return model.forward(in_features)
+    return model(in_features)
 
 
 def run_embedding(
@@ -59,7 +59,7 @@ def run_embedding(
 
     model = Embedding(vocab_size, d_model)
     model.load_state_dict({"weights": weights})
-    return model.forward(token_ids)
+    return model(token_ids)
 
 
 def run_swiglu(
@@ -95,7 +95,7 @@ def run_swiglu(
     model = Swiglu(d_model, d_ff)
     model.load_state_dict(
         {"w1.weights": w1_weight, "w2.weights": w2_weight, "w3.weights": w3_weight})
-    return model.forward(in_features)
+    return model(in_features)
 
 
 def run_scaled_dot_product_attention(
@@ -150,7 +150,10 @@ def run_multihead_self_attention(
         Float[Tensor, " ... sequence_length d_model"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    raise NotImplementedError
+    model = MultiheadSelfAttention(d_model, num_heads)
+    model.load_state_dict(
+        {"W_Q.weights": q_proj_weight, "W_K.weights": k_proj_weight, "W_V.weights": v_proj_weight, "W_O.weights": o_proj_weight})
+    return model(in_features)
 
 
 def run_multihead_self_attention_with_rope(
@@ -190,7 +193,10 @@ def run_multihead_self_attention_with_rope(
         Float[Tensor, " ... sequence_length d_model"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    raise NotImplementedError
+    model = MultiheadSelfAttention(d_model, num_heads, theta, max_seq_len)
+    model.load_state_dict(
+        {"W_Q.weights": q_proj_weight, "W_K.weights": k_proj_weight, "W_V.weights": v_proj_weight, "W_O.weights": o_proj_weight})
+    return model(in_features, token_positions)
 
 
 def run_rope(
@@ -214,7 +220,7 @@ def run_rope(
     """
 
     model = Rope(theta, d_k, max_seq_len)
-    return model.forward(in_query_or_key, token_positions)
+    return model(in_query_or_key, token_positions)
 
 
 def run_transformer_block(
@@ -394,7 +400,7 @@ def run_rmsnorm(
     """
     model = Rmsnorm(d_model, eps)
     model.load_state_dict({"weights": weights})
-    return model.forward(in_features)
+    return model(in_features)
 
 
 def run_silu(in_features: Float[Tensor, " ..."]) -> Float[Tensor, " ..."]:
@@ -408,7 +414,7 @@ def run_silu(in_features: Float[Tensor, " ..."]) -> Float[Tensor, " ..."]:
         Float[Tensor,"..."]: of with the same shape as `in_features` with the output of applying
         SiLU to each element.
     """
-    raise NotImplementedError
+    return silu(in_features)
 
 
 def run_get_batch(
