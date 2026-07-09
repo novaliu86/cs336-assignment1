@@ -1,3 +1,5 @@
+import math
+
 import torch
 from einops import einsum, rearrange, repeat
 
@@ -149,3 +151,40 @@ class Rope(torch.nn.Module):
         # print(
         #     f"shape of self.cos[token_positions]: {self.cos[token_positions].shape}")
         return einsum(x, self.cos[token_positions], "... seq_len d_k, ... seq_len d_k -> ... seq_len d_k") + einsum(rotate_half(x), self.sin[token_positions], "... seq_len d_k, ... seq_len d_k -> ... seq_len d_k")
+
+
+def softmax(x: torch.Tensor, dim: int) -> torch.Tensor:
+    """
+    Applies the stable Softmax activation function along the i-th dimension.
+
+    Formula: exp(x_i - max(x)) / sum(exp(x_i - max(x)))
+    """
+    # 1. Find the maximum value along the i-th dimension for numerical stability.
+    # keepdim=True ensures the dimension isn't dropped, keeping shapes aligned.
+    max_val = torch.max(x, dim=dim, keepdim=True).values
+
+    # 2. Subtract the max value (Safe Shift) and exponentiate.
+    # If an item was originally very large, subtracting the max drops it down to 0,
+    # making exp(0) == 1.0 (safely preventing infinity errors).
+    exp_x = torch.exp(x - max_val)
+
+    # 3. Sum the exponentiated values along the i-th dimension.
+    sum_exp = torch.sum(exp_x, dim=dim, keepdim=True)
+
+    # 4. Perform element-wise division to get final probabilities.
+    return exp_x / sum_exp
+
+
+def scaled_dot_product_attention(
+    Q: torch.Tensor,  # Float[Tensor, " ... queries d_k"]
+    K: torch.Tensor,  # Float[Tensor, " ... keys d_k"]
+    V: torch.Tensor,  # Float[Tensor, " ... keys d_v"]
+    mask: torch.Tensor | None = None,  # Bool[Tensor, " ... queries keys"]
+) -> torch.Tensor:
+    scale = 1.0 / math.sqrt(K.size(-1))
+    x = einsum(Q, K, "... queries d_k, ... keys d_k -> ... queries keys") * scale
+    if mask is not None:
+        # Fills masked positions with a large negative number so exp(-inf) approaches 0.0
+        x = x.masked_fill(~mask, float('-inf'))
+    attention_weights = softmax(x, dim=-1)
+    return einsum(attention_weights, V, "... queries keys, ... keys d_v -> ... queries d_v")
