@@ -34,9 +34,10 @@ class AdamW(torch.optim.Optimizer):
             raise ValueError(f"Invalid beta 2: {b2}")
         if weight_decay < 0:
             raise ValueError(f"Invalid decay rate: {dr}")
+        if eps < 0:
+            raise ValueError(f"Invalid eps: {eps}")
 
-        self.eps = eps
-        defaults = {"lr": lr, "b1": betas[0], "b2": betas[1], "dr": weight_decay}
+        defaults = {"lr": lr, "b1": betas[0], "b2": betas[1], "dr": weight_decay, "eps": eps}
         super().__init__(params, defaults)
 
     def step(self, closure: Optional[Callable] = None):
@@ -46,6 +47,7 @@ class AdamW(torch.optim.Optimizer):
             b1 = group["b1"]
             b2 = group["b2"]
             dr = group["dr"]
+            eps = group["eps"]
 
             for p in group["params"]:
                 if p.grad is None:
@@ -67,7 +69,7 @@ class AdamW(torch.optim.Optimizer):
                 v = b2 * v + (1 - b2) * (grad ** 2)
                 state["v"] = v
 
-                p.data -= lr_t * m / (torch.sqrt(v) + self.eps) # Update weight tensor in-place.
+                p.data -= lr_t * m / (torch.sqrt(v) + eps) # Update weight tensor in-place.
 
                 state["t"] = t + 1 # Increment iteration number.
         return loss
