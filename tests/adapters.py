@@ -34,7 +34,7 @@ def run_linear(
     """
 
     model = Linear(d_in, d_out)
-    model.load_state_dict({"weights": weights})
+    model.load_state_dict({"weight": weights})
     return model(in_features)
 
 
@@ -58,7 +58,7 @@ def run_embedding(
     """
 
     model = Embedding(vocab_size, d_model)
-    model.load_state_dict({"weights": weights})
+    model.load_state_dict({"weight": weights})
     return model(token_ids)
 
 
@@ -94,7 +94,7 @@ def run_swiglu(
 
     model = Swiglu(d_model, d_ff)
     model.load_state_dict(
-        {"w1.weights": w1_weight, "w2.weights": w2_weight, "w3.weights": w3_weight})
+        {"w1.weight": w1_weight, "w2.weight": w2_weight, "w3.weight": w3_weight})
     return model(in_features)
 
 
@@ -152,7 +152,7 @@ def run_multihead_self_attention(
     """
     model = MultiheadSelfAttention(d_model, num_heads)
     model.load_state_dict(
-        {"W_Q.weights": q_proj_weight, "W_K.weights": k_proj_weight, "W_V.weights": v_proj_weight, "W_O.weights": o_proj_weight})
+        {"q_proj.weight": q_proj_weight, "k_proj.weight": k_proj_weight, "v_proj.weight": v_proj_weight, "output_proj.weight": o_proj_weight})
     return model(in_features)
 
 
@@ -195,7 +195,7 @@ def run_multihead_self_attention_with_rope(
     """
     model = MultiheadSelfAttention(d_model, num_heads, theta, max_seq_len)
     model.load_state_dict(
-        {"W_Q.weights": q_proj_weight, "W_K.weights": k_proj_weight, "W_V.weights": v_proj_weight, "W_O.weights": o_proj_weight})
+        {"q_proj.weight": q_proj_weight, "k_proj.weight": k_proj_weight, "v_proj.weight": v_proj_weight, "output_proj.weight": o_proj_weight})
     return model(in_features, token_positions)
 
 
@@ -399,7 +399,7 @@ def run_rmsnorm(
         RMSNorm of the `in_features`.
     """
     model = Rmsnorm(d_model, eps)
-    model.load_state_dict({"weights": weights})
+    model.load_state_dict({"weight": weights})
     return model(in_features)
 
 

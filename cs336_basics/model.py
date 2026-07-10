@@ -8,13 +8,13 @@ class Linear(torch.nn.Module):
     def __init__(self, in_features, out_features, device=None, dtype=None):
         super().__init__()
         self.std = (2 / (in_features + out_features)) ** 0.5
-        self.weights = torch.nn.Parameter(
+        self.weight = torch.nn.Parameter(
             torch.empty(out_features, in_features))
         self.reset_parameters()
 
     def reset_parameters(self):
         torch.nn.init.trunc_normal_(
-            self.weights,
+            self.weight,
             mean=0.0,
             std=self.std,
             a=-3 * self.std,
@@ -22,18 +22,18 @@ class Linear(torch.nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return einsum(x, self.weights, " ... d_in, d_out d_in -> ... d_out")
+        return einsum(x, self.weight, " ... d_in, d_out d_in -> ... d_out")
 
 
 class Embedding(torch.nn.Module):
     def __init__(self, vocab_size, d_model, device=None, dtype=None):
         super().__init__()
-        self.weights = torch.nn.Parameter(torch.empty(vocab_size, d_model))
+        self.weight = torch.nn.Parameter(torch.empty(vocab_size, d_model))
         self.reset_parameters()
 
     def reset_parameters(self):
         torch.nn.init.trunc_normal_(
-            self.weights,
+            self.weight,
             mean=0.0,
             std=1,
             a=-3,
@@ -41,25 +41,25 @@ class Embedding(torch.nn.Module):
         )
 
     def forward(self, token_ids: torch.Tensor) -> torch.Tensor:
-        return self.weights[token_ids]
+        return self.weight[token_ids]
 
 
 class Rmsnorm(torch.nn.Module):
     def __init__(self, d_model: int, eps: float = 1e-5, device=None, dtype=None):
         super().__init__()
         self.eps = eps
-        self.weights = torch.nn.Parameter(torch.empty(d_model))
+        self.weight = torch.nn.Parameter(torch.empty(d_model))
         self.reset_parameters()
 
     def reset_parameters(self):
-        torch.nn.init.ones_(self.weights)
+        torch.nn.init.ones_(self.weight)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         in_dtype = x.dtype
         x = x.to(torch.float32)
         # Your code here performing RMSNorm
         rms = torch.sqrt(torch.mean(x ** 2, dim=-1, keepdim=True) + self.eps)
-        result = einsum(x / rms, self.weights,
+        result = einsum(x / rms, self.weight,
                         "... d_model, d_model -> ... d_model")
         # Return the result in the original dtype
         return result.to(in_dtype)
@@ -226,10 +226,10 @@ class MultiheadSelfAttention(torch.nn.Module):
         self.num_heads = num_heads
         hd_k = d_model
         hd_v = d_model
-        self.W_Q = Linear(hd_k, d_model, device=device, dtype=dtype)
-        self.W_K = Linear(hd_k, d_model, device=device, dtype=dtype)
-        self.W_V = Linear(hd_v, d_model, device=device, dtype=dtype)
-        self.W_O = Linear(d_model, hd_v, device=device, dtype=dtype)
+        self.q_proj = Linear(hd_k, d_model, device=device, dtype=dtype)
+        self.k_proj = Linear(hd_k, d_model, device=device, dtype=dtype)
+        self.v_proj = Linear(hd_v, d_model, device=device, dtype=dtype)
+        self.output_proj = Linear(d_model, hd_v, device=device, dtype=dtype)
 
         if theta and max_seq_len:
             self.rope = Rope(theta, d_model / num_heads, max_seq_len)
@@ -239,15 +239,15 @@ class MultiheadSelfAttention(torch.nn.Module):
         self.reset_parameters()
 
     def reset_parameters(self):
-        self.W_Q.reset_parameters()
-        self.W_K.reset_parameters()
-        self.W_V.reset_parameters()
-        self.W_O.reset_parameters()
+        self.q_proj.reset_parameters()
+        self.k_proj.reset_parameters()
+        self.v_proj.reset_parameters()
+        self.output_proj.reset_parameters()
 
     def forward(self, x: torch.Tensor, token_positions: torch.Tensor | None = None) -> torch.Tensor:
-        q_proj = self.W_Q(x)
-        k_proj = self.W_K(x)
-        v_proj = self.W_V(x)
+        q_proj = self.q_proj(x)
+        k_proj = self.k_proj(x)
+        v_proj = self.v_proj(x)
 
         Q = rearrange(q_proj, '... s (h d) -> ... h s d', h=self.num_heads)
         K = rearrange(k_proj, '... s (h d) -> ... h s d', h=self.num_heads)
@@ -263,4 +263,10 @@ class MultiheadSelfAttention(torch.nn.Module):
 
         out_concat = scaled_dot_product_attention(Q, K, V, mask)
         out_concat = rearrange(out_concat, '... h s d -> ... s (h d)')
-        return self.W_O(out_concat)
+        return self.output_proj(out_concat)
+
+
+
+class TransformerBlock(torch.nn.Module):
+    def __init__(self, d_model: int, num_heads: int, d_ff: int, theta: float | None = None, max_seq_len: int | None = None, device=None, dtype=None):
+        pass
