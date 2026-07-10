@@ -268,5 +268,55 @@ class MultiheadSelfAttention(torch.nn.Module):
 
 
 class TransformerBlock(torch.nn.Module):
-    def __init__(self, d_model: int, num_heads: int, d_ff: int, theta: float | None = None, max_seq_len: int | None = None, device=None, dtype=None):
-        pass
+    def __init__(self, d_model: int, num_heads: int, d_ff: int, theta: float | None = None, max_seq_len: int | None = None, device = None, dtype = None):
+        super().__init__()
+        self.attn = MultiheadSelfAttention(d_model, num_heads, theta=theta, max_seq_len=max_seq_len, device=device, dtype=dtype)
+        self.ln1 = Rmsnorm(d_model, device=device, dtype=dtype)
+        self.ffn = Swiglu(d_model, d_ff, device=device, dtype=dtype)
+        self.ln2 = Rmsnorm(d_model, device=device, dtype=dtype)
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        self.attn.reset_parameters()
+        self.ln1.reset_parameters()
+        self.ffn.reset_parameters()
+        self.ln2.reset_parameters()
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = x + self.attn(self.ln1(x))
+        return x + self.ffn(self.ln2(x))
+
+
+class TransformerLm(torch.nn.Module):
+    def __init__(
+        self,
+        vocab_size: int,
+        context_length: int,
+        num_layers: int,
+        d_model: int,
+        num_heads: int,
+        d_ff: int,
+        theta: float | None = None,
+        device = None,
+        dtype = None,
+    ):
+        super().__init__()
+        self.token_embeddings = Embedding(vocab_size, d_model, device = device, dtype = dtype)
+        self.layers = torch.nn.ModuleList([ TransformerBlock(d_model, num_heads, d_ff, theta, context_length, device = device, dtype = dtype) for _ in range(num_layers)])
+        self.ln_final = Rmsnorm(d_model, device=device, dtype=dtype)
+        self.lm_head = Linear(d_model, vocab_size, device=device, dtype=dtype)
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        self.token_embeddings.reset_parameters()
+        for layer in self.layers:
+            layer.reset_parameters()
+        self.ln_final.reset_parameters()
+        self.lm_head.reset_parameters()
+
+    def forward(self, token_ids: torch.Tensor) -> torch.Tensor:
+        x = self.token_embeddings(token_ids)
+        for layer in self.layers:
+            x = layer(x)
+        x = self.ln_final(x)
+        return self.lm_head(x)
