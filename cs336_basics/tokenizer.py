@@ -239,7 +239,7 @@ def tokenize(
     tokenizer_path_str: str,
     special_tokens: list[str],
 ):
-    output_file_path_str: str = f"{input_file_path_str}-tokens.pkl"
+    output_file_path_str: str = f"{input_file_path_str}-tokens.npy"
 
     tokenizer = Tokenizer.from_files(tokenizer_path_str, special_tokens=special_tokens)
 
@@ -261,8 +261,7 @@ def tokenize(
     print(f"Compression ratio: {(file_size_mb * 1000000 / len(token_ids)):.4} bytes/token")
     print(f"Throuput: {(file_size_mb / (tokenized_time - initiated_time)):.4} MB/second")
 
-    with open(output_file_path_str, "wb") as f:
-        pickle.dump(np.array(token_ids, dtype=np.uint16), f)
+    np.save(output_file_path_str, np.array(token_ids, dtype=np.uint16))
     print(f"Dumped token ids to {output_file_path_str}")
 
     verify(input_file_path_str, output_file_path_str, tokenizer)
@@ -277,8 +276,7 @@ def verify(
     if os.path.exists(decode_file_path_str):
         os.remove(decode_file_path_str)
 
-    with open(output_file_path_str, "rb") as f:
-        uint16_token_ids = pickle.load(f)
+    uint16_token_ids = np.load(output_file_path_str, mmap_mode='r')
     # print("Loaded all token ids")
     with open(decode_file_path_str, "w+", encoding="utf-8") as f:
         step_size = 10000000
@@ -298,8 +296,7 @@ def verify(
 
 
 if __name__ == "__main__":
-    tokenize(
-        "data/owt_valid.txt",
-        "data/BPE-owt.pkl",
-        ["<|endoftext|>"]
-    )
+    # tokenize("data/TinyStoriesV2-GPT4-valid.txt", "data/BPE-TinyStoriesV2-GPT4.pkl", ["<|endoftext|>"])
+    # tokenize("data/TinyStoriesV2-GPT4-train.txt", "data/BPE-TinyStoriesV2-GPT4.pkl", ["<|endoftext|>"])
+    tokenize("data/owt_valid.txt", "data/BPE-owt.pkl", ["<|endoftext|>"])
+    # tokenize("data/owt_train.txt", "data/BPE-owt.pkl", ["<|endoftext|>"])
