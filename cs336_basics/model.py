@@ -3,6 +3,8 @@ import math
 import torch
 from einops import einsum, rearrange, repeat
 
+from .nn_utils import softmax
+
 
 class Linear(torch.nn.Module):
     def __init__(self, in_features, out_features, device=None, dtype=None):
@@ -159,28 +161,6 @@ class Rope(torch.nn.Module):
         # print(
         #     f"shape of self.cos[token_positions]: {self.cos[token_positions].shape}")
         return einsum(x, self.cos[token_positions], "... seq_len d_k, ... seq_len d_k -> ... seq_len d_k") + einsum(rotate_half(x), self.sin[token_positions], "... seq_len d_k, ... seq_len d_k -> ... seq_len d_k")
-
-
-def softmax(x: torch.Tensor, dim: int) -> torch.Tensor:
-    """
-    Applies the stable Softmax activation function along the i-th dimension.
-
-    Formula: exp(x_i - max(x)) / sum(exp(x_i - max(x)))
-    """
-    # 1. Find the maximum value along the i-th dimension for numerical stability.
-    # keepdim=True ensures the dimension isn't dropped, keeping shapes aligned.
-    max_val = torch.max(x, dim=dim, keepdim=True).values
-
-    # 2. Subtract the max value (Safe Shift) and exponentiate.
-    # If an item was originally very large, subtracting the max drops it down to 0,
-    # making exp(0) == 1.0 (safely preventing infinity errors).
-    exp_x = torch.exp(x - max_val)
-
-    # 3. Sum the exponentiated values along the i-th dimension.
-    sum_exp = torch.sum(exp_x, dim=dim, keepdim=True)
-
-    # 4. Perform element-wise division to get final probabilities.
-    return exp_x / sum_exp
 
 
 def scaled_dot_product_attention(
