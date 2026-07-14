@@ -11,17 +11,6 @@ from cs336_basics.model import TransformerLm
 from cs336_basics.optimizer import AdamW, get_lr_cosine_schedule, gradient_clipping
 from cs336_basics.experiment_tracking import ExperimentTracker
 
-# def open_memmap_1d(path: str, np_dtype: str) -> np.memmap:
-#     """
-#     Open a 1D token memmap file. The file is assumed to be a raw binary array.
-#     """
-#     dtype = np.dtype(np_dtype)
-#     itemsize = dtype.itemsize
-#     nbytes = os.path.getsize(path)
-#     if nbytes % itemsize != 0:
-#         raise ValueError(f"File size is not divisible by dtype size: {path} ({nbytes} bytes, itemsize={itemsize})")
-#     length = nbytes // itemsize
-#     return np.memmap(path, mode="r", dtype=dtype, shape=(length,))
 
 def torch_dtype_from_string(s: str) -> torch.dtype:
     s = s.lower()
@@ -85,9 +74,6 @@ def main() -> None:
     best_ckpt_path = os.path.join(ckpt_dir, "ckpt.best.pt")
 
     # 3. Load datasets (memory-mapped)
-    # train_mm = open_memmap_1d(cfg.data.train_data_path, cfg.data.np_dtype)
-    # val_mm = open_memmap_1d(cfg.data.val_data_path, cfg.data.np_dtype)
-
     train_mm = np.load(cfg.data.train_data_path, mmap_mode='r')
     val_mm = np.load(cfg.data.val_data_path, mmap_mode='r')
 
@@ -110,7 +96,6 @@ def main() -> None:
         device=device,
         dtype=model_dtype
     ).to(device)
-    model = torch.compile(model)
 
     # 5. Create optimizer and (optionally) resume from checkpoint
     optimizer = AdamW(
@@ -131,6 +116,8 @@ def main() -> None:
     if resume_path is not None and os.path.exists(resume_path):
         start_it = load_checkpoint(resume_path, model, optimizer)
         print(f"[resume] loaded checkpoint: {resume_path} (start_it={start_it})")
+
+    model = torch.compile(model)
 
     # 6. Training loop initialization
     best_val = float("inf")
@@ -177,9 +164,10 @@ def main() -> None:
             now = time.time()
             dt = max(now - last_log_t, 1e-9)
             tok_s = (cfg.train.batch_size * cfg.model.context_length * cfg.train.log_interval) / dt
-            msg = f"it={it+1} loss={loss.item():.4f} lr={lr:.3e} tok/s={tok_s:.1f}"
+            loss_item = loss.item()
+            msg = f"it={it+1} loss={loss_item:.4f} lr={lr:.3e} tok/s={tok_s:.1f}"
             print(msg)
-            tracker.log(step=it + 1, metrics={"train/loss": float(loss.item()), "train/lr": float(lr), "train/tok_s": float(tok_s)})
+            tracker.log(step=it + 1, metrics={"train/loss": float(loss_item), "train/lr": float(lr), "train/tok_s": float(tok_s)})
             last_log_t = now
         
         # 7.8 Periodic evaluation on validation set
@@ -192,14 +180,13 @@ def main() -> None:
             # Save the best-performing checkpoint
             if val_loss < best_val:
                 best_val = val_loss
-                save_checkpoint(model, optimizer, it + 1, best_ckpt_path)
+                save_checkpoint(model._orig_mod, optimizer, it + 1, best_ckpt_path)
 
         # 7.9 Periodic checkpointing
-        if (it + 1) % cfg.train.ckpt_interval == 0:
-            save_checkpoint(model, optimizer, it + 1, ckpt_path)
+        if (it + 1) % cfg.train.ckpt_interval == 0 or (it + 1) == cfg.train.max_steps:
+            save_checkpoint(model._orig_mod, optimizer, it + 1, ckpt_path)
 
-    # 8. Final checkpoint adn cleanup 
-    save_checkpoint(model, optimizer, cfg.train.max_steps, ckpt_path)
+    # 8. Final cleanup
     tracker.close()
 
 if __name__ == "__main__":

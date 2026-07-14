@@ -18,7 +18,7 @@ class DataConfig:
     # context_length: int = 256
 
     # Device string used by get_batch(), cuda:0 or cpu
-    device: str = "cpu"
+    device: str = "mps"
 
 @dataclass
 class ModelConfig:
