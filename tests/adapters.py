@@ -154,7 +154,7 @@ def run_multihead_self_attention(
         Float[Tensor, " ... sequence_length d_model"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    model = MultiheadSelfAttention(d_model, num_heads)
+    model = MultiheadSelfAttention(d_model, num_heads, in_features.size(-2))
     model.load_state_dict(
         {"q_proj.weight": q_proj_weight, "k_proj.weight": k_proj_weight, "v_proj.weight": v_proj_weight, "output_proj.weight": o_proj_weight})
     return model(in_features)
@@ -197,7 +197,7 @@ def run_multihead_self_attention_with_rope(
         Float[Tensor, " ... sequence_length d_model"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    model = MultiheadSelfAttention(d_model, num_heads, theta, max_seq_len)
+    model = MultiheadSelfAttention(d_model, num_heads, max_seq_len, theta)
     model.load_state_dict(
         {"q_proj.weight": q_proj_weight, "k_proj.weight": k_proj_weight, "v_proj.weight": v_proj_weight, "output_proj.weight": o_proj_weight})
     return model(in_features, token_positions)
@@ -381,7 +381,8 @@ def run_transformer_lm(
         Float[Tensor, "batch_size sequence_length vocab_size"]: Tensor with the predicted unnormalized
         next-word distribution for each token.
     """
-    model = TransformerLm(vocab_size, context_length, num_layers, d_model, num_heads, d_ff, rope_theta)
+    model = TransformerLm(vocab_size, context_length,
+                          num_layers, d_model, num_heads, d_ff, rope_theta)
     model.load_state_dict(weights)
     return model(in_indices)
 

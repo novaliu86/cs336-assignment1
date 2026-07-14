@@ -11,7 +11,7 @@ class Linear(torch.nn.Module):
         super().__init__()
         self.std = (2 / (in_features + out_features)) ** 0.5
         self.weight = torch.nn.Parameter(
-            torch.empty(out_features, in_features))
+            torch.empty(out_features, in_features, device=device, dtype=dtype))
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -30,7 +30,8 @@ class Linear(torch.nn.Module):
 class Embedding(torch.nn.Module):
     def __init__(self, vocab_size, d_model, device=None, dtype=None):
         super().__init__()
-        self.weight = torch.nn.Parameter(torch.empty(vocab_size, d_model))
+        self.weight = torch.nn.Parameter(torch.empty(
+            vocab_size, d_model, device=device, dtype=dtype))
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -50,7 +51,8 @@ class Rmsnorm(torch.nn.Module):
     def __init__(self, d_model: int, eps: float = 1e-5, device=None, dtype=None):
         super().__init__()
         self.eps = eps
-        self.weight = torch.nn.Parameter(torch.empty(d_model))
+        self.weight = torch.nn.Parameter(
+            torch.empty(d_model, device=device, dtype=dtype))
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -120,10 +122,11 @@ class Rope(torch.nn.Module):
 
         # 1. Compute the inverse frequencies for the rotation angles
         # Only compute for d_k // 2 because frequencies are applied to pairs
-        inv_freq = 1.0 / (theta ** (torch.arange(0, d_k, 2).float() / d_k))
+        inv_freq = 1.0 / \
+            (theta ** (torch.arange(0, d_k, 2, device=device).float() / d_k))
 
         # 2. Generate a sequential time axis (0, 1, 2, ..., max_seq_len - 1)
-        t = torch.arange(max_seq_len, dtype=torch.float32)
+        t = torch.arange(max_seq_len, device=device, dtype=torch.float32)
 
         # 3. Outer product: calculate frequency matrix [max_seq_len, d_k // 2]
         freqss = torch.outer(t, inv_freq)
@@ -141,7 +144,7 @@ class Rope(torch.nn.Module):
         pass
 
     def forward(self, x: torch.Tensor, token_positions: torch.Tensor | None) -> torch.Tensor:
-        if token_positions == None:
+        if token_positions is None:
             seq_len = x.size(-2)
             token_positions = torch.arange(seq_len)
 
@@ -178,7 +181,7 @@ def scaled_dot_product_attention(
     return einsum(attention_weights, V, "... queries keys, ... keys d_v -> ... queries d_v")
 
 
-def create_causal_mask(seq_len: int, device: torch.device = torch.device("cpu")) -> torch.Tensor:
+def create_causal_mask(seq_len: int, device: torch.device) -> torch.Tensor:
     """
     Generates a boolean causal mask of shape [1, 1, seq_len, seq_len].
 
@@ -199,7 +202,7 @@ def create_causal_mask(seq_len: int, device: torch.device = torch.device("cpu"))
 
 
 class MultiheadSelfAttention(torch.nn.Module):
-    def __init__(self, d_model: int, num_heads: int, theta: float | None = None, max_seq_len: int | None = None, device=None, dtype=None):
+    def __init__(self, d_model: int, num_heads: int, max_seq_len: int, theta: float | None = None, device=None, dtype=None):
         super().__init__()
         assert d_model % num_heads == 0, "d_model must be cleanly divisible by num_heads"
 
@@ -211,11 +214,14 @@ class MultiheadSelfAttention(torch.nn.Module):
         self.v_proj = Linear(hd_v, d_model, device=device, dtype=dtype)
         self.output_proj = Linear(d_model, hd_v, device=device, dtype=dtype)
 
-        if theta and max_seq_len:
-            self.rope = Rope(theta, d_model / num_heads, max_seq_len)
+        if theta:
+            self.rope = Rope(theta, d_model / num_heads,
+                             max_seq_len, device=device)
         else:
             self.rope = None
 
+        self.register_buffer("mask", create_causal_mask(
+            max_seq_len, device=device), persistent=False)
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -232,25 +238,24 @@ class MultiheadSelfAttention(torch.nn.Module):
         Q = rearrange(q_proj, '... s (h d) -> ... h s d', h=self.num_heads)
         K = rearrange(k_proj, '... s (h d) -> ... h s d', h=self.num_heads)
 
-        if self.rope != None:
+        if self.rope is not None:
             Q = self.rope(Q, token_positions)
             K = self.rope(K, token_positions)
 
         V = rearrange(v_proj, '... s (h d) -> ... h s d', h=self.num_heads)
 
         seq_len = x.size(-2)
-        mask = create_causal_mask(seq_len, device=x.device)
-
-        out_concat = scaled_dot_product_attention(Q, K, V, mask)
+        out_concat = scaled_dot_product_attention(
+            Q, K, V, self.mask[:, :, 0:seq_len, 0:seq_len])
         out_concat = rearrange(out_concat, '... h s d -> ... s (h d)')
         return self.output_proj(out_concat)
 
 
-
 class TransformerBlock(torch.nn.Module):
-    def __init__(self, d_model: int, num_heads: int, d_ff: int, theta: float | None = None, max_seq_len: int | None = None, device = None, dtype = None):
+    def __init__(self, d_model: int, num_heads: int, d_ff: int, theta: float | None = None, max_seq_len: int | None = None, device=None, dtype=None):
         super().__init__()
-        self.attn = MultiheadSelfAttention(d_model, num_heads, theta=theta, max_seq_len=max_seq_len, device=device, dtype=dtype)
+        self.attn = MultiheadSelfAttention(
+            d_model, num_heads, max_seq_len, theta=theta, device=device, dtype=dtype)
         self.ln1 = Rmsnorm(d_model, device=device, dtype=dtype)
         self.ffn = Swiglu(d_model, d_ff, device=device, dtype=dtype)
         self.ln2 = Rmsnorm(d_model, device=device, dtype=dtype)
@@ -277,12 +282,14 @@ class TransformerLm(torch.nn.Module):
         num_heads: int,
         d_ff: int,
         theta: float | None = None,
-        device = None,
-        dtype = None,
+        device=None,
+        dtype=None,
     ):
         super().__init__()
-        self.token_embeddings = Embedding(vocab_size, d_model, device = device, dtype = dtype)
-        self.layers = torch.nn.ModuleList([ TransformerBlock(d_model, num_heads, d_ff, theta, context_length, device = device, dtype = dtype) for _ in range(num_layers)])
+        self.token_embeddings = Embedding(
+            vocab_size, d_model, device=device, dtype=dtype)
+        self.layers = torch.nn.ModuleList([TransformerBlock(
+            d_model, num_heads, d_ff, theta, context_length, device=device, dtype=dtype) for _ in range(num_layers)])
         self.ln_final = Rmsnorm(d_model, device=device, dtype=dtype)
         self.lm_head = Linear(d_model, vocab_size, device=device, dtype=dtype)
         self.reset_parameters()
