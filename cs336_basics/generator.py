@@ -52,7 +52,7 @@ def generate_text(
     prompt_tokens: list[int], 
     max_new_tokens: int, 
     context_length: int, 
-    temperature: float = 1.0,
+    temperature: float = 0.8,
     device: str = "cpu"
 ) -> list[int]:
     """
