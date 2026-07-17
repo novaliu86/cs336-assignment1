@@ -32,7 +32,6 @@ def load_model(run_name: str) -> tuple[TransformerLm, torch.device]:
         device=device,
         dtype=model_dtype
     ).to(device)
-    model = torch.compile(model)
 
     optimizer = AdamW(
         model.parameters(),
@@ -44,6 +43,7 @@ def load_model(run_name: str) -> tuple[TransformerLm, torch.device]:
 
     load_checkpoint(Path(f"runs/{run_name}/checkpoints/ckpt.best.pt"), model, optimizer)
 
+    model = torch.compile(model)
     return (model, device, context_length)
 
 @torch.no_grad()
@@ -93,9 +93,10 @@ def generate_text(
 
 if __name__ == "__main__":
 
+    torch.set_float32_matmul_precision('high')
     tokenizer = Tokenizer.from_files("data/BPE-TinyStoriesV2-GPT4.pkl", special_tokens=["<|endoftext|>"])
 
-    run_name = "ts_baseline_with_mps"
+    run_name = "ts_baseline_20260717_001222"
     (model, device, context_length) = load_model(run_name)
 
     mock_model = model.eval()
@@ -110,7 +111,7 @@ if __name__ == "__main__":
         prompt_tokens=prompt,
         max_new_tokens=max_tokens_to_generate,
         context_length=context_length,
-        temperature=1.,
+        temperature=0.8,
         device=device
     )
 

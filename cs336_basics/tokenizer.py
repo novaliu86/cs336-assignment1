@@ -296,7 +296,7 @@ def verify(
 
 
 if __name__ == "__main__":
-    # tokenize("data/TinyStoriesV2-GPT4-valid.txt", "data/BPE-TinyStoriesV2-GPT4.pkl", ["<|endoftext|>"])
-    # tokenize("data/TinyStoriesV2-GPT4-train.txt", "data/BPE-TinyStoriesV2-GPT4.pkl", ["<|endoftext|>"])
-    tokenize("data/owt_valid.txt", "data/BPE-owt.pkl", ["<|endoftext|>"])
+    tokenize("data/TinyStoriesV2-GPT4-valid.txt", "data/BPE-TinyStoriesV2-GPT4.pkl", ["<|endoftext|>"])
+    tokenize("data/TinyStoriesV2-GPT4-train.txt", "data/BPE-TinyStoriesV2-GPT4.pkl", ["<|endoftext|>"])
+    # tokenize("data/owt_valid.txt", "data/BPE-owt.pkl", ["<|endoftext|>"])
     # tokenize("data/owt_train.txt", "data/BPE-owt.pkl", ["<|endoftext|>"])

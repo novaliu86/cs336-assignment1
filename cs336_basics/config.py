@@ -18,7 +18,7 @@ class DataConfig:
     # context_length: int = 256
 
     # Device string used by get_batch(), cuda:0 or cpu
-    device: str = "mps"
+    device: str = "cuda:0"
 
 @dataclass
 class ModelConfig:
@@ -43,11 +43,11 @@ class ModelConfig:
 
 @dataclass
 class OptimizerConfig:
-    lr_max: float = 1e-3
+    lr_max: float = 9e-3
     lr_min: float = 1e-4
 
-    warmup_iters: int = 100
-    cosine_cycle_iters: int = 5_000
+    warmup_iters: int = 500
+    cosine_cycle_iters: int = 10000
     
     beta1: float = 0.9
     beta2: float = 0.999
@@ -58,14 +58,14 @@ class OptimizerConfig:
 
 @dataclass
 class TrainingConfig:
-    max_steps: int = 5000
-    batch_size: int = 32
+    max_steps: int = 10000
+    batch_size: int = 128
     
-    log_interval: int = 10
-    eval_interval: int = 500
+    log_interval: int = 100
+    eval_interval: int = 2000
     eval_batches: int = 20
 
-    ckpt_interval: int = 1000
+    ckpt_interval: int = 2000
     resume_from: Optional[str] = None
 
     seed: int = 42

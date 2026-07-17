@@ -241,8 +241,8 @@ def test_bpe_minimum_case():
 if __name__ == "__main__":
     # test_bpe_minimum_case()
 
-    # train_bpe_tinystories()
-    # exam_bpe_tinystories()
+    train_bpe_tinystories()
+    exam_bpe_tinystories()
 
-    train_bpe_expts_owt()
-    exam_bpe_owt()
+    # train_bpe_expts_owt()
+    # exam_bpe_owt()

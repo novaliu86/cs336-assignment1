@@ -45,6 +45,8 @@ def estimate_loss(model: torch.nn.Module, data: np.memmap, cfg) -> float:
     return float(np.mean(losses))
 
 def main() -> None:
+    torch.set_float32_matmul_precision('high')
+
     # 1. Load configuration and set random seed
     cfg = get_default_config()
 
