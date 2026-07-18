@@ -7,6 +7,7 @@ import sys
 import os
 from functools import lru_cache
 from pathlib import Path
+from datetime import datetime
 import time
 import numpy as np
 
@@ -167,6 +168,10 @@ class Tokenizer:
     def _encode_pretoken(self, pretoken: str) -> list[int]:
         tokens = [bytes([b]) for b in pretoken.encode("utf-8")]
 
+        if len(pretoken) > 4096:
+            print(f"  [Warning] pretoken with length {len(pretoken)} is unexpected! Tokenize each byte instead.")
+            return [self.token_id_by_bytes[token] for token in tokens]
+
         while (True):
             merge_index = -1
 
@@ -199,6 +204,7 @@ class Tokenizer:
             for j in range(len(pretokens)):
                 if j == len(pretokens) - 1:
                     last_pretoken_start = len(token_ids)
+                # print(f"  Processing pretoken {pretokens[j]} which is {len(pretokens[j])} long")
                 token_ids.extend(self._encode_pretoken(pretokens[j]))
 
             (special_token_ids, special_tokens_end) = self._encode_special_tokens(text, special_tokens_end + len(doc))
@@ -221,6 +227,7 @@ class Tokenizer:
     def encode_iterable(self, iterable: Iterable[str]) -> Iterator[int]:
         left_over_text = ""
         for new_text in iterable:
+            # print(f"    [text_start]{new_text}[text_end]")
             (token_ids, last_pretoken_start) = self._encode(left_over_text + new_text)
             left_over_text = self.decode(token_ids[last_pretoken_start:])
             yield from token_ids[:last_pretoken_start]
@@ -242,14 +249,18 @@ def tokenize(
     output_file_path_str: str = f"{input_file_path_str}-tokens.npy"
 
     tokenizer = Tokenizer.from_files(tokenizer_path_str, special_tokens=special_tokens)
+    print(f"Loaded tokenizer from {tokenizer_path_str}")
 
     initiated_time = time.perf_counter()
 
     input_file_path = Path(input_file_path_str)
     token_ids = []
     with open(input_file_path) as f:
+        # f.seek(4470100001)
         for ids in tokenizer.encode_iterable(f):
             token_ids.append(ids)
+            if (len(token_ids) % 10_000_000 == 0):
+                print(f" [{datetime.now()}] Current number of tokens: {len(token_ids)/1000000}M.")
 
     tokenized_time = time.perf_counter()
     print(f"Time to tokenize file {input_file_path}: {(tokenized_time - initiated_time):.6} seconds")
@@ -296,7 +307,7 @@ def verify(
 
 
 if __name__ == "__main__":
-    tokenize("data/TinyStoriesV2-GPT4-valid.txt", "data/BPE-TinyStoriesV2-GPT4.pkl", ["<|endoftext|>"])
-    tokenize("data/TinyStoriesV2-GPT4-train.txt", "data/BPE-TinyStoriesV2-GPT4.pkl", ["<|endoftext|>"])
+    # tokenize("data/TinyStoriesV2-GPT4-valid.txt", "data/BPE-TinyStoriesV2-GPT4.pkl", ["<|endoftext|>"])
+    # tokenize("data/TinyStoriesV2-GPT4-train.txt", "data/BPE-TinyStoriesV2-GPT4.pkl", ["<|endoftext|>"])
     # tokenize("data/owt_valid.txt", "data/BPE-owt.pkl", ["<|endoftext|>"])
-    # tokenize("data/owt_train.txt", "data/BPE-owt.pkl", ["<|endoftext|>"])
+    tokenize("data/owt_train.txt", "data/BPE-owt.pkl", ["<|endoftext|>"])
