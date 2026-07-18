@@ -110,7 +110,7 @@ def count_pretokens(
             data_file, num_chunks, chunk_split_special_token)
     print(f"Detected {len(boundaries) - 1} chunks.")
 
-    num_cores = multiprocessing.cpu_count()
+    num_cores = multiprocessing.cpu_count()     # On some cloud services like RunPod a fixed number of cores should be set
     print(f"Starting parallel processing using {num_cores} CPU cores...")
     batch_params = split_into_n_batches_rigid([(input_path, start, end, special_tokens)
                                               for start, end in zip(boundaries[:-1], boundaries[1:])], num_cores)

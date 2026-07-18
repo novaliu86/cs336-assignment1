@@ -64,9 +64,14 @@ class MergeManager:
             elements = [bytes([b]) for b in pretoken.encode("utf-8")]
             self.pretoken_elements_and_counts.append((elements, count))
 
+            if (len(self.pretoken_elements_and_counts) % 10000) == 0:
+                print(f"  Constructing merge manager: current pretoken_elements_and_counts size: {len(pretoken_elements_and_counts)}.")
+
         self.pairs: PairMap = PairMap()
 
         for i in range(len(self.pretoken_elements_and_counts)):
+            if (i % 10000) == 0:
+                print(f"  Constructing merge manager: current pretoken_elements_and_counts size: {len(pretoken_elements_and_counts)}.")
             (elements, pretoken_count) = self.pretoken_elements_and_counts[i]
             for j in range(len(elements) - 1):
                 self.pairs.add_pair_count(
@@ -137,6 +142,9 @@ def build_vocab(
         vocab[len(vocab)] = token
         merges.append(merge)
 
+        if (len(vocab) % 1000) == 0:
+            print(f"  Current vocab size: {len(vocab)}.")
+
     return (vocab, merges)
 
 
@@ -144,6 +152,7 @@ def train_bpe(
     input_path: str | os.PathLike,
     vocab_size: int,
     special_tokens: list[str],
+    num_chunks: int = 100,
 ) -> tuple[dict[int, bytes], list[tuple[bytes, bytes]]]:
 
     # pretoken_counter_cache_path = Path(os.fspath(input_path) + ".pkl")
@@ -161,7 +170,9 @@ def train_bpe(
     #         pickle.dump(pretoken_counter, f)
     #     print(f"Counted pretokens and dumped to {pretoken_counter_cache_path}")
 
-    pretoken_counter = count_pretokens(input_path, special_tokens, 100)
+    pretoken_counter = count_pretokens(input_path, special_tokens, num_chunks)
+    print(f"Finished Pretoken counting: get {len(pretoken_counter)} pretokens.")
+
     merge_manager = MergeManager(pretoken_counter)
 
     return build_vocab(merge_manager, vocab_size, special_tokens)
@@ -194,7 +205,8 @@ def train_bpe_expts_owt():
     (vocab, merges) = train_bpe(
         input_path="data/owt_train.txt",
         vocab_size=32000,
-        special_tokens=["<|endoftext|>"]
+        special_tokens=["<|endoftext|>"],
+        num_chunks=4096,
     )
     # --- Code you want to measure ends here ---
 
@@ -241,8 +253,8 @@ def test_bpe_minimum_case():
 if __name__ == "__main__":
     # test_bpe_minimum_case()
 
-    train_bpe_tinystories()
-    exam_bpe_tinystories()
+    # train_bpe_tinystories()
+    # exam_bpe_tinystories()
 
-    # train_bpe_expts_owt()
-    # exam_bpe_owt()
+    train_bpe_expts_owt()
+    exam_bpe_owt()
